@@ -8,25 +8,19 @@ import {
   removeMenuApi,
   updateMenuApi,
   soldOutMenuApi,
+  handleResponse,
 } from "./utils/api_utils.js";
 
 export default function useMenu(
   renderingFunction,
   initCategoryName = "espresso"
 ) {
-  /**
-   * Members of useMenu
-   */
   let getMenuState;
   let setMenuState;
 
   setCategoryName(initCategoryName);
 
-  /**
-   * Data Mutation Functions
-   */
   async function setCategoryName(categoryName) {
-    setApiCategoryName(categoryName);
     const state = await loadMenuApi(categoryName);
 
     [getMenuState, setMenuState] = useState(state, renderingFunction, {
@@ -41,52 +35,55 @@ export default function useMenu(
     renderingFunction(getMenuState(), { removeMenu, updateMenu, soldOutMenu });
   }
 
-  function addMenu(name) {
-    addMenuApi(name).then((response) => {
-      const { data: menu } = response;
+  async function addMenu(name) {
+    if (name) {
+      for (const value of Object.values(getMenuState())) {
+        if (value.name === name) {
+          alert("동일한 이름의 메뉴가 존재합니다!");
+          return;
+        }
+      }
 
-      if (menu) {
+      handleResponse(await addMenuApi(name), (response) => {
+        const { data: menu } = response;
+
         setMenuState({
           ...getMenuState(),
           [menu.id]: menu,
         });
-      }
-    });
-  }
-
-  function removeMenu(menuId) {
-    if (confirm("정말로 삭제하시겠습니까?")) {
-      removeMenuApi(menuId).then((response) => {
-        if (response.status === 200) {
-          const { [menuId]: removeMenu, ...rest } = getMenuState();
-
-          setMenuState({
-            ...rest,
-          });
-        }
       });
     }
   }
 
-  function soldOutMenu(menuId) {
-    soldOutMenuApi(menuId).then((response) => {
-      if (response.status === 200) {
-        const { [menuId]: soldOutMenu, ...rest } = getMenuState();
-        soldOutMenu.isSoldOut = !soldOutMenu.isSoldOut;
+  async function removeMenu(menuId) {
+    if (confirm("정말로 삭제하시겠습니까?")) {
+      handleResponse(await removeMenuApi(menuId), (response) => {
+        const { [menuId]: removeMenu, ...rest } = getMenuState();
 
         setMenuState({
-          [menuId]: soldOutMenu,
           ...rest,
         });
-      }
+      });
+    }
+  }
+
+  async function soldOutMenu(menuId) {
+    handleResponse(await soldOutMenuApi(menuId), (response) => {
+      const { [menuId]: soldOutMenuObj, ...rest } = getMenuState();
+      soldOutMenuObj.isSoldOut = !soldOutMenuObj.isSoldOut;
+
+      setMenuState({
+        [menuId]: soldOutMenuObj,
+        ...rest,
+      });
     });
   }
 
-  function updateMenu(menuId) {
+  async function updateMenu(menuId) {
     const newName = prompt("수정하고 싶은 이름을 입력해주세요.");
 
     if (newName) {
-      updateMenuApi(menuId, newName).then((response) => {
+      handleResponse(await updateMenuApi(menuId, newName), (response) => {
         const { data: updatedMenu } = response;
         const { [menuId]: oldMenu, ...rest } = getMenuState();
 
@@ -96,14 +93,6 @@ export default function useMenu(
         });
       });
     }
-  }
-
-  function getMenuNextSeq() {
-    if (Object.keys(getMenuState()).length > 0) {
-      return Math.max(...Object.keys(getMenuState())) + 1;
-    }
-
-    return 1;
   }
 
   return [setCategoryName, addMenu, removeMenu, updateMenu, soldOutMenu];
